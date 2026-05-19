@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的配對清單 - 興大換換</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* 頁面背景與字體 */
+        body { background-color: #f4f7f6; margin: 0; font-family: "Microsoft JhengHei", sans-serif; }
+        
+        .container { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+
+        /* 配對卡片設計 */
+        .match-card {
+            display: flex;
+            align-items: center;
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            gap: 20px;
+            transition: all 0.3s ease;
+        }
+
+        /* 物品顯示區 */
+        .item-box {
+            text-align: center;
+            flex: 0 0 130px;
+        }
+
+        .item-preview {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 1px solid #eee;
+            margin-bottom: 10px;
+        }
+
+        .item-name {
+            font-weight: bold;
+            font-size: 0.95em;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 中間箭頭 */
+        .match-divider {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #6c5ce7;
+        }
+
+        .match-arrow { font-size: 2.5em; font-weight: bold; }
+
+        /* 資訊區 */
+        .info-section {
+            flex-grow: 1;
+            padding: 0 20px;
+            border-left: 1px solid #f0f0f0;
+        }
+
+        .tag-match {
+            display: inline-block;
+            background: #6c5ce7;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            margin-bottom: 10px;
+        }
+
+        /* 按鈕區 */
+        .action-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 160px;
+        }
+
+        .btn-link {
+            text-decoration: none;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.9em;
+            transition: background 0.2s;
+        }
+
+        .btn-contact { background-color: #2ed573; color: white; }
+        .btn-contact:hover { background-color: #26b962; }
+
+        .btn-detail { background-color: #f8f9fa; color: #555; border: 1px solid #ddd; }
+        .btn-detail:hover { background-color: #e9ecef; }
+
+        .btn-unmatch {
+            background: none;
+            color: #ff4757;
+            border: 1px solid #ff4757;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+        .btn-unmatch:hover { background: #ff4757; color: white; }
+
+        /* 手機版適應 */
+        @media (max-width: 600px) {
+            .match-card { flex-direction: column; text-align: center; }
+            .info-section { border-left: none; border-top: 1px solid #f0f0f0; padding: 20px 0; }
+            .match-arrow { transform: rotate(90deg); margin: 10px 0; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h2>興大換換 Barter</h2>
+        <nav style="display: flex; gap: 20px;">
+            <a href="/">回首頁</a>
+            <a href="/barter/">繼續滑卡</a>
+            <span style="margin-left: auto;">👤 {{ user.sub }}</span>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2 style="margin-bottom: 10px; color: #2c3e50;">🎊 配對成功清單</h2>
+        <p style="color: #888; margin-bottom: 40px;">雙方都對彼此的物品有興趣，快去聯繫對方吧！</p>
+
+        {% for m in matches %}
+        <div class="match-card" id="match-{{ m.their_item.id }}">
+            <div class="item-box">
+                <img src="{{ m.my_item.image }}" class="item-preview">
+                <div class="item-name">{{ m.my_item.name }}</div>
+                <div style="font-size: 0.75em; color: #aaa; margin-top: 5px;">(您的物品)</div>
+            </div>
+
+            <div class="match-divider">
+                <div class="match-arrow">⇄</div>
+            </div>
+
+            <div class="item-box">
+                <img src="{{ m.their_item.image }}" class="item-preview">
+                <div class="item-name">{{ m.their_item.name }}</div>
+                <a href="/products/{{ m.their_item.id }}" class="btn-link btn-detail" style="display: block; margin-top: 10px;">查看詳情</a>
+            </div>
+
+            <div class="info-section">
+                <span class="tag-match">雙向興趣</span>
+                <p style="margin: 10px 0;">賣家：<strong>{{ m.partner_name }}</strong></p>
+                
+                <div class="action-group">
+                    {% set contact_url = m.contact %}
+                    {% if m.contact_type == 'ig' %}
+                        {% set contact_url = 'https://instagram.com/' + m.contact.replace('@', '') %}
+                    {% elif m.contact_type == 'line' %}
+                        {% set contact_url = 'https://line.me/ti/p/~' + m.contact %}
+                    {% endif %}
+
+                    <a href="{{ contact_url }}" target="_blank" class="btn-link btn-contact">
+                        {% if m.contact_type == 'ig' %}📸 私訊 IG{% elif m.contact_type == 'line' %}💬 加 LINE{% else %}🔗 聯絡賣家{% endif %}
+                    </a>
+
+                    <button class="btn-unmatch" 
+                            data-id="{{ m.their_item.id }}" 
+                            onclick="confirmUnmatch(this)">
+                        💔 取消配對
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 100px 20px; background: white; border-radius: 16px;">
+            <div style="font-size: 4em; margin-bottom: 20px;">📦</div>
+            <h3>目前還沒有配對紀錄</h3>
+            <p style="color: #999;">快去「換換模式」多滑幾張卡片，或者是刊登更多有趣的物品吧！</p>
+            <a href="/barter/"><button style="margin-top: 20px; background: #6c5ce7;">前往換換模式</button></a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        async function confirmUnmatch(buttonElement) {
+            // 從按鈕屬性中抓取 ID
+            const productId = buttonElement.getAttribute('data-id');
+            
+            if (!confirm('確定要取消與此商品的配對嗎？\n這也會將您的物品從對方的配對清單中移除。')) return;
+
+            try {
+                // 發送請求到後端
+                const response = await fetch(`/barter/unmatch/${productId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    // 找到最近的卡片容器
+                    const card = buttonElement.closest('.match-card');
+                    if (card) {
+                        // 執行消失動畫
+                        card.style.opacity = '0';
+                        card.style.transform = 'translateY(20px)';
+                        card.style.transition = '0.4s ease';
+                        
+                        setTimeout(() => {
+                            card.remove();
+                            // 如果卡片都被刪光了，重新整理頁面以顯示空狀態
+                            if (document.querySelectorAll('.match-card').length === 0) {
+                                location.reload();
+                            }
+                        }, 400);
+                    }
+                } else {
+                    alert('取消失敗：' + (data.message || '未知錯誤'));
+                }
+            } catch (err) {
+                console.error('Network Error:', err);
+                alert('連線失敗，請檢查網路或伺服器狀態');
+            }
+        }
+    </script>
+</body>
+</html>

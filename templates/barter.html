@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>興大換換 Barter - NCHU Campus Market</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* 滑卡舞台 */
+        .swipe-stage {
+            height: 75vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            background: #f0f2f5;
+            border-radius: 20px;
+            margin: 10px 0;
+            touch-action: none; /* 重要：防止手機瀏覽器預設滑動行為 */
+        }
+
+        .card-stack {
+            width: 340px;
+            height: 500px;
+            position: relative;
+            perspective: 1000px;
+        }
+
+        /* 卡片本體 */
+        .swipe-card {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            cursor: grab;
+            user-select: none;
+            will-change: transform, opacity;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+        }
+
+        .swipe-card:active { cursor: grabbing; }
+
+        .swipe-card img {
+            width: 100%;
+            height: 320px;
+            object-fit: cover;
+            border-radius: 20px 20px 0 0;
+            pointer-events: none; /* 防止圖片被單獨拖曳 */
+        }
+
+        .card-info {
+            padding: 20px;
+            flex-grow: 1;
+            background: white;
+            border-radius: 0 0 20px 20px;
+        }
+
+        .card-info h3 { margin: 0; color: #2c3e50; font-size: 1.4em; }
+        .card-info p { margin: 5px 0; color: #7f8c8d; }
+
+        /* LIKE / NOPE 蓋章效果 */
+        .stamp {
+            position: absolute;
+            top: 40px;
+            padding: 10px 20px;
+            border: 6px solid;
+            border-radius: 10px;
+            font-size: 2.5em;
+            font-weight: bold;
+            opacity: 0;
+            z-index: 10;
+            pointer-events: none;
+            transition: opacity 0.1s;
+        }
+        .stamp-like {
+            color: #2ed573;
+            border-color: #2ed573;
+            left: 20px;
+            transform: rotate(-20deg);
+        }
+        .stamp-dislike {
+            color: #ff4757;
+            border-color: #ff4757;
+            right: 20px;
+            transform: rotate(20deg);
+        }
+
+        /* 按鈕控制區 (保留作為輔助) */
+        .swipe-controls {
+            display: flex;
+            gap: 30px;
+            margin-top: 20px;
+            z-index: 100;
+        }
+
+        .btn-action {
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+        }
+        .btn-action:active { transform: scale(0.9); }
+        .btn-dislike { color: #ff4757; }
+        .btn-like { color: #2ed573; }
+
+        /* 滑開後的消失動畫 */
+        .exit-right { transform: translateX(200%) rotate(30deg) !important; opacity: 0; }
+        .exit-left { transform: translateX(-200%) rotate(-30deg) !important; opacity: 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h2>興大換換 Barter</h2>
+        <nav style="display: flex; gap: 20px;">
+            <a href="/">回首頁</a>
+            <a href="/barter/matches">🎁 我的配對</a>
+            <span style="margin-left: auto;">👤 {{ user.sub }}</span>
+        </nav>
+    </header>
+
+    <div class="container" style="text-align: center;">
+        <div class="swipe-stage">
+            <div class="card-stack" id="stack">
+                {% for p in products %}
+                <div class="swipe-card" id="p-{{ p.id }}" data-zindex="{{ loop.revindex }}">
+                    <div class="stamp stamp-like">LIKE</div>
+                    <div class="stamp stamp-dislike">NOPE</div>
+                    
+                    <img src="{{ p.image or '/static/default_item.png' }}" alt="{{ p.name }}">
+                    
+                    <div class="card-info">
+                        <h3>{{ p.name }}</h3>
+                        <p>📍 {{ p.location }}</p>
+                        <p style="font-size: 0.9em; line-height: 1.4;">
+                            {{ p.description | truncate(45, True, '...') }}
+                        </p>
+                    </div>
+                </div>
+                {% else %}
+                <div style="padding: 50px;">
+                    <h3>暫時沒有更多新卡片</h3>
+                    <p>試著重新整理，或上傳新物品！</p>
+                    <a href="/post"><button style="margin-top: 20px;">我要刊登</button></a>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="swipe-controls">
+                <button class="btn-action btn-dislike" onclick="handleBtnSwipe(false)">✖</button>
+                <button class="btn-action btn-like" onclick="handleBtnSwipe(true)">❤</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isDragging = false;
+        let startX = 0;
+        let currentX = 0;
+        let activeCard = null;
+        const threshold = 130; // 滑動判定門檻
+
+        // 初始化所有卡片的疊加層級
+        function initCardStack() {
+            const cards = document.querySelectorAll('.swipe-card');
+            cards.forEach(card => {
+                card.style.zIndex = card.dataset.zindex;
+            });
+            setupCurrentCard();
+        }
+
+        // 設定目前最上方的那張卡片可以被滑動
+        function setupCurrentCard() {
+            const cards = Array.from(document.querySelectorAll('.swipe-card:not(.exit-left):not(.exit-right)'));
+            if (cards.length === 0) return;
+            
+            activeCard = cards[cards.length - 1];
+            activeCard.addEventListener('mousedown', startDrag);
+            activeCard.addEventListener('touchstart', startDrag, { passive: true });
+        }
+
+        function startDrag(e) {
+            isDragging = true;
+            startX = (e.type === 'mousedown') ? e.pageX : e.touches[0].pageX;
+            activeCard.style.transition = 'none'; // 拖曳時關閉平滑動畫
+            
+            document.addEventListener('mousemove', onDrag);
+            document.addEventListener('touchmove', onDrag, { passive: false });
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+        }
+
+        function onDrag(e) {
+            if (!isDragging) return;
+            if (e.type === 'touchmove') e.preventDefault();
+
+            currentX = (e.type === 'mousemove') ? e.pageX : e.touches[0].pageX;
+            let deltaX = currentX - startX;
+            let rotate = deltaX / 15; // 旋轉效果
+
+            activeCard.style.transform = `translateX(${deltaX}px) rotate(${rotate}deg)`;
+
+            // 印章透明度反饋
+            const likeStamp = activeCard.querySelector('.stamp-like');
+            const dislikeStamp = activeCard.querySelector('.stamp-dislike');
+            if (deltaX > 0) {
+                likeStamp.style.opacity = Math.min(deltaX / threshold, 1);
+                dislikeStamp.style.opacity = 0;
+            } else {
+                dislikeStamp.style.opacity = Math.min(Math.abs(deltaX) / threshold, 1);
+                likeStamp.style.opacity = 0;
+            }
+        }
+
+        async function endDrag() {
+            if (!isDragging) return;
+            isDragging = false;
+            
+            document.removeEventListener('mousemove', onDrag);
+            document.removeEventListener('touchmove', onDrag);
+            
+            let deltaX = currentX - startX;
+            activeCard.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s';
+
+            if (Math.abs(deltaX) > threshold) {
+                const isLike = deltaX > 0;
+                executeSwipe(isLike);
+            } else {
+                // 距離不夠，彈回原位
+                activeCard.style.transform = 'translateX(0) rotate(0)';
+                activeCard.querySelector('.stamp-like').style.opacity = 0;
+                activeCard.querySelector('.stamp-dislike').style.opacity = 0;
+            }
+        }
+
+        // 按鈕觸發的滑動
+        function handleBtnSwipe(isLike) {
+            const cards = Array.from(document.querySelectorAll('.swipe-card:not(.exit-left):not(.exit-right)'));
+            if (cards.length === 0) return;
+            activeCard = cards[cards.length - 1];
+            executeSwipe(isLike);
+        }
+
+        // 執行滑動邏輯 (動畫 + API)
+        async function executeSwipe(isLike) {
+            const productId = activeCard.id.split('-')[1];
+            activeCard.classList.add(isLike ? 'exit-right' : 'exit-left');
+
+            // 呼叫後端 API
+            try {
+                const response = await fetch(`/barter/swipe/${productId}?is_like=${isLike}`, { method: 'POST' });
+                const data = await response.json();
+                if (data.status === 'match') {
+                    setTimeout(() => {
+                        alert(`🎊 Match! 配對成功！\n對方也想換你的物品。\n快去「我的配對」查看聯絡方式！`);
+                    }, 400);
+                }
+            } catch (err) { console.error(err); }
+
+            // 移除舊卡片並設定下一張
+            setTimeout(() => {
+                activeCard.remove();
+                setupCurrentCard();
+            }, 400);
+        }
+
+        window.onload = initCardStack;
+    </script>
+</body>
+</html>
