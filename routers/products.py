@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 import auth_utils
 import database
 import models
+from product_options import PRODUCT_CATEGORIES
 
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -54,6 +55,7 @@ def get_products(request: Request, category: str = None, db: Session = Depends(d
             "products": products,
             "current_category": category or "全部商品",
             "user": user,
+            "categories": PRODUCT_CATEGORIES,
         },
     )
 
@@ -106,7 +108,15 @@ def edit_product_page(request: Request, product_id: int, db: Session = Depends(d
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not user or not product or product.owner_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="權限不足")
-    return templates.TemplateResponse("edit.html", {"request": request, "product": product, "user": user})
+    return templates.TemplateResponse(
+        "edit.html",
+        {
+            "request": request,
+            "product": product,
+            "user": user,
+            "categories": PRODUCT_CATEGORIES,
+        },
+    )
 
 
 @router.post("/{product_id}/edit")

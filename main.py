@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import auth_utils
 import database
 import models
+from product_options import PRODUCT_CATEGORIES
 from routers import auth, barter, feedback, products, search, seller
 
 
@@ -59,6 +60,7 @@ def read_root(request: Request, db: Session = Depends(database.get_db)):
             "request": request,
             "products": recent_products,
             "user": user,
+            "categories": PRODUCT_CATEGORIES,
         },
     )
 
@@ -73,7 +75,10 @@ def post_page(request: Request):
     user = get_user_from_cookie(request)
     if not user:
         return RedirectResponse(url="/login")
-    return templates.TemplateResponse("post.html", {"request": request, "user": user})
+    return templates.TemplateResponse(
+        "post.html",
+        {"request": request, "user": user, "categories": PRODUCT_CATEGORIES},
+    )
 
 
 @app.get("/contact")
