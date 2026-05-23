@@ -1,16 +1,31 @@
-from fastapi import FastAPI, Request, Depends
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from routers import products, search, feedback, seller, auth
-import models, database, auth_utils
-from jose import jwt
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse
-from routers import products, search, feedback, seller, auth, barter # 新增 barter
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from jose import jwt
+from sqlalchemy import inspect, text
+from sqlalchemy.orm import Session
+
+import auth_utils
+import database
+import models
+from routers import auth, barter, feedback, products, search, seller
+
 
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="中興大學校園二手交易平台")
+
+def ensure_barter_schema():
+    inspector = inspect(database.engine)
+    columns = [column["name"] for column in inspector.get_columns("barter_swipes")]
+    if "offered_product_id" not in columns:
+        with database.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE barter_swipes ADD COLUMN offered_product_id INTEGER"))
+
+
+ensure_barter_schema()
+
+app = FastAPI(title="興大校園二手市集")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -22,30 +37,36 @@ app.include_router(seller.router)
 app.include_router(auth.router)
 app.include_router(barter.router)
 
+
 def get_user_from_cookie(request: Request):
     token = request.cookies.get("access_token")
     if not token:
         return None
     try:
         token = token.replace("Bearer ", "")
-        payload = jwt.decode(token, auth_utils.SECRET_KEY, algorithms=[auth_utils.ALGORITHM])
-        return payload
-    except:
+        return jwt.decode(token, auth_utils.SECRET_KEY, algorithms=[auth_utils.ALGORITHM])
+    except Exception:
         return None
+
 
 @app.get("/")
 def read_root(request: Request, db: Session = Depends(database.get_db)):
     user = get_user_from_cookie(request)
     recent_products = db.query(models.Product).order_by(models.Product.id.desc()).limit(6).all()
-    return templates.TemplateResponse("index.html", {
-        "request": request, 
-        "products": recent_products,
-        "user": user
-    })
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "products": recent_products,
+            "user": user,
+        },
+    )
+
 
 @app.get("/login")
 def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
+
 
 @app.get("/post")
 def post_page(request: Request):
@@ -53,6 +74,7 @@ def post_page(request: Request):
     if not user:
         return RedirectResponse(url="/login")
     return templates.TemplateResponse("post.html", {"request": request, "user": user})
+
 
 @app.get("/contact")
 def contact_page(request: Request):
